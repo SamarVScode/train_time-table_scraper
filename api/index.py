@@ -1,6 +1,5 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import os
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -9,7 +8,6 @@ app = Flask(__name__)
 CORS(app)
 
 def clean_url(href, base="https://indiarailinfo.com"):
-    """Convert relative URLs to absolute URLs"""
     if not href:
         return ""
     if href.startswith(('http://', 'https://')):
@@ -20,7 +18,6 @@ def clean_url(href, base="https://indiarailinfo.com"):
     return f"{base}{prefix}{href}"
 
 def scrape_train_data(train_number):
-    """Scrape train timetable data from IndiaRailInfo and return as dict"""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
@@ -32,7 +29,6 @@ def scrape_train_data(train_number):
     scraperapi_endpoint = 'https://api.scraperapi.com/'
 
     try:
-        # Step 1: Search for train
         payload = {'api_key': scraperapi_key, 'url': search_url}
         res = requests.get(scraperapi_endpoint, params=payload, headers=headers, timeout=30)
         res.raise_for_status()
@@ -67,7 +63,6 @@ def scrape_train_data(train_number):
                 "train_number": train_number
             }
 
-        # Step 2: Fetch timetable
         timetable_payload = {'api_key': scraperapi_key, 'url': timetable_url}
         timetable_res = requests.get(scraperapi_endpoint, params=timetable_payload, headers=headers, timeout=30)
         timetable_res.raise_for_status()
@@ -75,7 +70,10 @@ def scrape_train_data(train_number):
 
         heading = soup_table.find('h1') or soup_table.find('h2')
         if heading:
-            train_name = heading.get_text(strip=True).split("/")[0].strip()
+            raw_title = heading.get_text(strip=True)
+            name_match = re.search(rf'(?:{train_number}/|⇒\s*{train_number}/)?([^(\n\r]+)', raw_title)
+            if name_match:
+                train_name = name_match.group(1).strip()
 
         table_container = soup_table.find('div', class_='newschtable') or soup_table.find('div', class_='ttable')
         if not table_container:
@@ -137,7 +135,6 @@ def scrape_train_data(train_number):
                             break
 
                 station_entry = {
-                    "train_name": train_name,
                     "stop": int(stop_num_text),
                     "code": station_code,
                     "name": station_name,
