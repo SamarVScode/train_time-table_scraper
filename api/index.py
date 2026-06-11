@@ -25,14 +25,16 @@ def scrape_train_data(train_number):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 
-    # Check if user has defined a proxy via environment variables
-    proxy_url = os.environ.get('PROXY_URL')
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-
     search_url = f"https://indiarailinfo.com/blog?q={train_number}"
 
+    # ScraperAPI configuration
+    scraperapi_key = '2489929e94aa0f1851699927d4155daf'
+    scraperapi_endpoint = 'https://api.scraperapi.com/'
+
     try:
-        res = requests.get(search_url, headers=headers, proxies=proxies, timeout=15)
+        # Step 1: Search for train
+        payload = {'api_key': scraperapi_key, 'url': search_url}
+        res = requests.get(scraperapi_endpoint, params=payload, headers=headers, timeout=30)
         res.raise_for_status()
         raw_html = res.text
 
@@ -65,7 +67,9 @@ def scrape_train_data(train_number):
                 "train_number": train_number
             }
 
-        timetable_res = requests.get(timetable_url, headers=headers, proxies=proxies, timeout=15)
+        # Step 2: Fetch timetable
+        timetable_payload = {'api_key': scraperapi_key, 'url': timetable_url}
+        timetable_res = requests.get(scraperapi_endpoint, params=timetable_payload, headers=headers, timeout=30)
         timetable_res.raise_for_status()
         soup_table = BeautifulSoup(timetable_res.text, 'html.parser')
 
