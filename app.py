@@ -26,11 +26,12 @@ def live_scrape_app_json(train_number):
         timetable_url = None
         train_name = "Unknown Train"
         
-        iri_pattern = re.compile(rf"train/.*-{train_number}/\\d+\")
+        # FIX: Corrected regex string closure!
+        iri_pattern = re.compile(rf"train/.*-{train_number}/\d+")
+        
         for link in soup_search.find_all('a', href=True):
             if iri_pattern.search(link['href']):
                 timetable_url = clean_url(link['href'])
-                # Safe split check
                 if "/" in link.text:
                     train_name = link.text.strip().split("/", 1)[1].strip()
                 else:
@@ -44,7 +45,6 @@ def live_scrape_app_json(train_number):
         soup_table = BeautifulSoup(res_table.text, 'html.parser')
         
         route_data = []
-        # Main table parser row logic
         rows = soup_table.find_all('div', class_='mrtbrow')
         for idx, row in enumerate(rows, start=1):
             cols = row.find_all('div')
@@ -85,8 +85,6 @@ def live_scrape_app_json(train_number):
     except Exception as e:
         return {"success": False, "error": f"Scraping Error: {str(e)}"}
 
-# --- API ROUTES ---
-
 @app.route('/api/train/<train_number>', methods=['GET'])
 def get_train_data(train_number):
     if len(train_number) == 5 and train_number.isdigit():
@@ -96,10 +94,9 @@ def get_train_data(train_number):
 
 @app.route('/', methods=['GET'])
 def home():
-    # Serves the HTML frontend interface automatically at the root address
     return render_template_string(HTML_INTERFACE)
 
-# --- INBUILT FRONTEND UI ---
+
 HTML_INTERFACE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -107,7 +104,7 @@ HTML_INTERFACE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IndiaRailInfo Scraper | Data Flow Test</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen p-6 font-sans">
     <div class="max-w-5xl mx-auto">
@@ -176,7 +173,6 @@ HTML_INTERFACE = """
             statusMsg.classList.remove('hidden');
 
             try {
-                // Modified path to query current host structure directly
                 const response = await fetch('/api/train/' + trainNum);
                 const data = await response.json();
                 statusMsg.classList.add('hidden');
@@ -199,11 +195,11 @@ HTML_INTERFACE = """
 
                         tbody.innerHTML += `
                             <tr class="hover:bg-gray-800/50 transition">
-                                <td class="px-6 py-4 text-gray-500">\${stop.stop}</td>
-                                <td class="px-6 py-4 font-medium text-gray-200">\${stop.name} <span class="text-gray-500 font-mono text-xs">(\${stop.code})</span></td>
-                                <td class="px-6 py-4 text-gray-300">\${stop.arr} / \${stop.dep}</td>
-                                <td class="px-6 py-4 text-gray-300">\text{\${stop.distance_covered}} km</td>
-                                <td class="px-6 py-4">\${quotaBadge}</td>
+                                <td class="px-6 py-4 text-gray-500">` + stop.stop + `</td>
+                                <td class="px-6 py-4 font-medium text-gray-200">` + stop.name + ` <span class="text-gray-500 font-mono text-xs">(` + stop.code + `)</span></td>
+                                <td class="px-6 py-4 text-gray-300">` + stop.arr + ` / ` + stop.dep + `</td>
+                                <td class="px-6 py-4 text-gray-300">` + stop.distance_covered + `</td>
+                                <td class="px-6 py-4">` + quotaBadge + `</td>
                             </tr>`;
                     });
                     output.classList.remove('hidden');
