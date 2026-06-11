@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IndiaRailInfo Scraper | Modern Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for better look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6 font-sans antialiased selection:bg-blue-500 selection:text-white">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-sm">
+                Train Route & Quota Explorer
+            </h1>
+            <p class="text-gray-400 mt-3 text-sm">Powered by IndiaRailInfo Scraper API</p>
+        </header>
+
+        <!-- Search Box -->
+        <div class="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-2xl max-w-lg mx-auto mb-10 transition-all hover:border-gray-600">
+            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 ml-1">Enter 5-Digit Train Number</label>
+            <div class="flex gap-3">
+                <input type="text" id="trainInput" placeholder="e.g., 12533" maxlength="5"
+                       class="w-full bg-gray-950 border border-gray-600 rounded-xl px-5 py-3 text-white font-mono text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow placeholder-gray-600">
+                <button onclick="fetchTrainData()" id="searchBtn" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center min-w-[120px]">
+                    <span id="btnText">Search</span>
+                    <svg id="btnSpinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+            <p id="statusMsg" class="text-xs mt-4 text-emerald-400 hidden font-medium flex items-center gap-2">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Scraping live data from IndiaRailInfo...
+            </p>
+        </div>
+
+        <!-- Error Container -->
+        <div id="errorContainer" class="hidden bg-red-950/40 border border-red-900/50 text-red-200 p-6 rounded-2xl max-w-2xl mx-auto mb-10 shadow-lg">
+            <div class="flex items-center gap-3 font-bold text-lg mb-2 text-red-400">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Error Fetching Data
+            </div>
+            <p id="errorText" class="text-sm text-red-300/80 ml-9"></p>
+        </div>
+
+        <!-- Output Container -->
+        <div id="outputContainer" class="hidden bg-gray-800 rounded-3xl border border-gray-700 shadow-2xl overflow-hidden transition-all duration-500 opacity-0 transform translate-y-4">
+
+            <!-- Header Info -->
+            <div class="bg-gradient-to-b from-gray-800 to-gray-900 p-8 border-b border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                    <div class="flex items-center gap-4 mb-2">
+                        <span id="trainNumBadge" class="bg-blue-600/20 text-blue-400 font-mono font-bold px-3 py-1 rounded-lg border border-blue-500/30 text-lg"></span>
+                        <h2 id="trainName" class="text-3xl font-extrabold text-gray-100"></h2>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-400 mt-3 font-medium">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            <span id="trainRouteInfo">Source → Destination</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                            <span id="trainStops">Total Stops: --</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-emerald-900/30 border border-emerald-800/50 text-emerald-400 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-inner">
+                    <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                    Success: 200 OK
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-gray-900/90 text-gray-400 uppercase text-xs tracking-wider border-b border-gray-700 sticky top-0">
+                        <tr>
+                            <th class="px-6 py-5 font-semibold">#</th>
+                            <th class="px-6 py-5 font-semibold">Station</th>
+                            <th class="px-6 py-5 font-semibold">Arr / Dep</th>
+                            <th class="px-6 py-5 font-semibold">Halt</th>
+                            <th class="px-6 py-5 font-semibold">Dist (Km)</th>
+                            <th class="px-6 py-5 font-semibold">PF / Day</th>
+                            <th class="px-6 py-5 font-semibold text-right">Quota</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-gray-800 bg-gray-900/30"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Handle enter key press
+        document.getElementById("trainInput").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                fetchTrainData();
+            }
+        });
+
+        async function fetchTrainData() {
+            const trainNum = document.getElementById('trainInput').value.trim();
+            const statusMsg = document.getElementById('statusMsg');
+            const output = document.getElementById('outputContainer');
+            const errBox = document.getElementById('errorContainer');
+            const errText = document.getElementById('errorText');
+
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            const searchBtn = document.getElementById('searchBtn');
+
+            if (trainNum.length !== 5 || isNaN(trainNum)) {
+                errText.innerText = "Please enter a valid 5-digit train number.";
+                errBox.classList.remove('hidden');
+                output.classList.add('hidden');
+                return;
+            }
+
+            // Reset UI states
+            output.classList.add('hidden');
+            output.classList.remove('opacity-100', 'translate-y-0');
+            errBox.classList.add('hidden');
+            statusMsg.classList.remove('hidden');
+
+            // Button loading state
+            btnText.classList.add('hidden');
+            btnSpinner.classList.remove('hidden');
+            searchBtn.disabled = true;
+            searchBtn.classList.add('opacity-80', 'cursor-not-allowed');
+
+            try {
+                // Determine API endpoint based on environment
+                // If hosted on Vercel, it routes via /api/train/
+                const apiUrl = '/api/train/' + trainNum;
+
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+
+                statusMsg.classList.add('hidden');
+
+                if (data.success) {
+                    // Populate Header
+                    document.getElementById('trainNumBadge').innerText = data.train_number;
+                    document.getElementById('trainName').innerText = data.train_name;
+                    document.getElementById('trainRouteInfo').innerText = `${data.source} → ${data.destination}`;
+                    document.getElementById('trainStops').innerText = `Total Stations: ${data.total_stations}`;
+
+                    const tbody = document.getElementById('tableBody');
+                    tbody.innerHTML = '';
+
+                    // Populate Rows
+                    data.route.forEach(stop => {
+                        let quotaBadge = '';
+                        let q = stop.quota.toUpperCase();
+
+                        // Styled Quota Badges
+                        if (q.includes('GN')) {
+                            quotaBadge = `<span class="bg-blue-900/40 text-blue-300 border border-blue-800/60 px-2.5 py-1 rounded text-xs font-bold tracking-wide">GN</span>`;
+                        } else if (q.includes('RL')) {
+                            quotaBadge = `<span class="bg-purple-900/40 text-purple-300 border border-purple-800/60 px-2.5 py-1 rounded text-xs font-bold tracking-wide">RL</span>`;
+                        } else if (q.includes('PQ')) {
+                            quotaBadge = `<span class="bg-amber-900/40 text-amber-300 border border-amber-800/60 px-2.5 py-1 rounded text-xs font-bold tracking-wide">PQ</span>`;
+                        } else if (q.includes('TERMINUS')) {
+                            quotaBadge = `<span class="bg-gray-800 text-gray-400 border border-gray-700 px-2.5 py-1 rounded text-xs font-bold tracking-wide">END</span>`;
+                        } else {
+                            quotaBadge = `<span class="text-gray-500 text-xs font-bold">${stop.quota}</span>`;
+                        }
+
+                        // Leg From Tooltip
+                        let legTooltip = stop.leg_from !== '-' && stop.leg_from !== 'Origin' ? `title="Quota starts from: ${stop.leg_from}"` : '';
+
+                        // Row structure
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-gray-800/80 transition-colors group">
+                                <td class="px-6 py-4 text-gray-500 font-mono">${stop.stop}</td>
+                                <td class="px-6 py-4">
+                                    <div class="font-medium text-gray-200">${stop.name}</div>
+                                    <div class="text-gray-500 font-mono text-xs mt-0.5">${stop.code}</div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="text-emerald-400 font-medium">${stop.arrival}</div>
+                                    <div class="text-amber-400 font-medium mt-0.5">${stop.departure}</div>
+                                </td>
+                                <td class="px-6 py-4 text-gray-400">${stop.halt_time}</td>
+                                <td class="px-6 py-4 text-gray-300 font-mono">${stop.distance_km}</td>
+                                <td class="px-6 py-4">
+                                    <div class="text-gray-300">PF: ${stop.platform}</div>
+                                    <div class="text-gray-500 text-xs mt-0.5">Day ${stop.day}</div>
+                                </td>
+                                <td class="px-6 py-4 text-right" ${legTooltip}>
+                                    ${quotaBadge}
+                                </td>
+                            </tr>
+
+                            ${stop.next_segment ? `
+                            <tr class="bg-gray-900/50">
+                                <td colspan="7" class="px-6 py-2 text-xs text-center border-y border-gray-800/50">
+                                    <div class="inline-flex items-center gap-4 text-gray-500 bg-gray-800/40 px-4 py-1.5 rounded-full border border-gray-700/30">
+                                        <span class="flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ${stop.next_segment.intermediate_stops} intermediate stops</span>
+                                        <span class="text-gray-700">•</span>
+                                        <span>${stop.next_segment.travel_time}</span>
+                                        <span class="text-gray-700">•</span>
+                                        <span>${stop.next_segment.distance}</span>
+                                    </div>
+                                </td>
+                            </tr>` : ''}
+                        `;
+                    });
+
+                    // Reveal Output with animation
+                    output.classList.remove('hidden');
+                    // Small delay to allow display:block to apply before animating opacity
+                    setTimeout(() => {
+                        output.classList.add('opacity-100', 'translate-y-0');
+                    }, 50);
+
+                } else {
+                    errText.innerText = data.error || "Unknown error occurred while scraping data.";
+                    errBox.classList.remove('hidden');
+                }
+            } catch (error) {
+                statusMsg.classList.add('hidden');
+                errText.innerText = "Network execution failed or server is unreachable. Check browser console for details.";
+                errBox.classList.remove('hidden');
+                console.error("Fetch Error:", error);
+            } finally {
+                // Restore button state
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+                searchBtn.disabled = false;
+                searchBtn.classList.remove('opacity-80', 'cursor-not-allowed');
+            }
+        }
+    </script>
+</body>
+</html>
