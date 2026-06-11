@@ -204,7 +204,7 @@
                                     <div class="text-amber-400 font-medium mt-0.5">${stop.departure}</div>
                                 </td>
                                 <td class="px-6 py-4 text-gray-400">${stop.halt_time}</td>
-                                <td class="px-6 py-4 text-gray-300 font-mono">${stop.distance_km}</td>
+                                <td class="px-6 py-4 text-gray-300 font-mono">${stop.distance_covered}</td>
                                 <td class="px-6 py-4">
                                     <div class="text-gray-300">PF: ${stop.platform}</div>
                                     <div class="text-gray-500 text-xs mt-0.5">Day ${stop.day}</div>
@@ -222,7 +222,7 @@
                                         <span class="text-gray-700">•</span>
                                         <span>${stop.next_segment.travel_time}</span>
                                         <span class="text-gray-700">•</span>
-                                        <span>${stop.next_segment.distance}</span>
+                                        <span>${stop.next_segment.distance_covered}</span>
                                     </div>
                                 </td>
                             </tr>` : ''}

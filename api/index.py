@@ -27,25 +27,31 @@ def scrape_train_data(train_number):
     search_url = f"https://indiarailinfo.com/blog?q={train_number}"
 
     try:
-        # Step 1: Search for train to get timetable URL
         res = requests.get(search_url, headers=headers, timeout=15)
         res.raise_for_status()
-        soup_search = BeautifulSoup(res.text, 'html.parser')
+        raw_html = res.text
 
         timetable_url = None
-        train_name = "Unknown Train"
-        # FIX: The original regex was rf"/train/.*-{re.escape(train_number)}/\d+"
-        # Sometimes train URLs don't have a hyphen right before the number (e.g. /train/12417/1149 or /train/12417-name/1149).
-        # We relax the pattern to find /train/, followed by anything, then the train number, and then possibly a slash.
-        iri_pattern = re.compile(rf"/train/.*{re.escape(train_number)}.*")
+        train_name = f"Train {train_number}"
 
-        for link in soup_search.find_all('a', href=True):
-            href = link['href']
-            if iri_pattern.search(href):
-                timetable_url = clean_url(href)
+        found_links = re.findall(rf'href=["\'](/train/[^"\']+?{train_number}(?:/\d+)*)["\']', raw_html)
+
+        if not found_links:
+            soup_search = BeautifulSoup(raw_html, 'html.parser')
+            for link in soup_search.find_all('a', href=True):
+                href = link['href']
                 text = link.get_text(strip=True)
-                train_name = text.split("/", 1)[1].strip() if "/" in text else text
-                break
+                if train_number in text or f"-{train_number}" in href:
+                    match = re.search(r'/(\d+)(?:/\d+)*$', href)
+                    if match:
+                        found_links.append(href)
+
+        if found_links:
+            clean_target = list(set(found_links))[0]
+            id_extract = re.search(r'/train/(\d+)|/(\d+)(?:/\d+)*$', clean_target)
+            if id_extract:
+                train_id = id_extract.group(1) or id_extract.group(2)
+                timetable_url = f"https://indiarailinfo.com/train/{train_id}"
 
         if not timetable_url:
             return {
@@ -54,12 +60,18 @@ def scrape_train_data(train_number):
                 "train_number": train_number
             }
 
-        # Step 2: Scrape timetable page
         timetable_res = requests.get(timetable_url, headers=headers, timeout=15)
         timetable_res.raise_for_status()
         soup_table = BeautifulSoup(timetable_res.text, 'html.parser')
 
-        table_container = soup_table.find('div', class_='newschtable')
+        heading = soup_table.find('h1') or soup_table.find('h2')
+        if heading:
+            train_name = heading.get_text(strip=True).split("/")[0].strip()
+
+        table_container = soup_table.find('div', class_='newschtable') or soup_table.find('div', class_='ttable')
+        if not table_container:
+            table_container = soup_table.find('div', id=re.compile(r'.*table.*'))
+
         if not table_container:
             return {
                 "success": False,
@@ -67,7 +79,6 @@ def scrape_train_data(train_number):
                 "train_number": train_number
             }
 
-        # Parse station rows
         rows = table_container.find_all('div', recursive=False)
         route_data = []
         current_quota = "GN"
@@ -76,63 +87,84 @@ def scrape_train_data(train_number):
         for row in rows:
             cols = row.find_all('div', recursive=False)
 
-            # Main station rows
-            if len(cols) >= 18:
+            if len(cols) >= 10:
                 stop_num_text = cols[0].get_text(strip=True)
-                if stop_num_text == "#" or not stop_num_text:
+                if stop_num_text == "#" or not stop_num_text or not stop_num_text.isdigit():
                     continue
 
-                station_code = cols[2].get_text(strip=True)
-                station_name = cols[3].get_text(strip=True)
+                station_code = cols[2].get_text(strip=True) if len(cols) > 2 else "-"
+                station_name = cols[3].get_text(strip=True) if len(cols) > 3 else "-"
 
-                # Check quota updates
-                note_col = cols[5]
-                if note_col.has_attr('title'):
-                    title = note_col['title'].lower()
-                    if "remote location quota" in title:
-                        current_quota = "RL"
-                        current_leg = station_name
-                    elif "pooled quota" in title:
-                        current_quota = "PQ"
-                        current_leg = station_name
+                if len(cols) > 5:
+                    note_col = cols[5]
+                    if note_col.has_attr('title'):
+                        title = note_col['title'].lower()
+                        if "remote location quota" in title:
+                            current_quota = "RL"
+                            current_leg = station_name
+                        elif "pooled quota" in title:
+                            current_quota = "PQ"
+                            current_leg = station_name
 
-                # Extract official distance
-                km_col = cols[13]
-                official_dist = km_col.get_text(strip=True)
-                span = km_col.find('span')
-                if span and span.has_attr('title') and "Official Km:" in span['title']:
-                    official_dist = span['title'].split("Official Km:")[-1].strip()
+                official_dist = "-"
+                if len(cols) > 13:
+                    km_col = cols[13]
+                    text_data = km_col.get_text(strip=True)
+                    span = km_col.find('span')
+                    if span and span.has_attr('title') and "Official Km:" in span['title']:
+                        official_dist = span['title'].split("Official Km:")[-1].strip()
+                    elif text_data:
+                        official_dist = text_data.replace("km", "").strip()
+
+                if official_dist == "-" or not official_dist:
+                    for col in cols:
+                        text_data = col.get_text(strip=True)
+                        if "km" in text_data.lower():
+                            span = col.find('span')
+                            if span and span.has_attr('title') and "Official Km:" in span['title']:
+                                official_dist = span['title'].split("Official Km:")[-1].strip()
+                            else:
+                                official_dist = text_data.replace("km", "").strip()
+                            break
 
                 station_entry = {
-                    "stop": int(stop_num_text) if stop_num_text.isdigit() else stop_num_text,
+                    "train_name": train_name,
+                    "stop": int(stop_num_text),
                     "code": station_code,
                     "name": station_name,
-                    "arrival": cols[6].get_text(strip=True) or "-",
-                    "departure": cols[8].get_text(strip=True) or "-",
-                    "halt_time": cols[10].get_text(strip=True) or "-",
-                    "platform": cols[11].get_text(strip=True) or "-",
-                    "day": cols[12].get_text(strip=True) or "1",
-                    "distance_km": f"{official_dist} km" if official_dist else "-",
+                    "arrival": cols[6].get_text(strip=True) if len(cols) > 6 else "-",
+                    "departure": cols[8].get_text(strip=True) if len(cols) > 8 else "-",
+                    "halt_time": cols[10].get_text(strip=True) if len(cols) > 10 else "-",
+                    "platform": cols[11].get_text(strip=True) if len(cols) > 11 else "-",
+                    "day": cols[12].get_text(strip=True) if len(cols) > 12 else "1",
+                    "distance_covered": f"{official_dist} km" if official_dist and official_dist != "-" else "-",
                     "quota": current_quota,
                     "leg_from": current_leg
                 }
                 route_data.append(station_entry)
 
-            # Intermediate gap rows
             elif 'intrmdtstn' in row.get('class', []):
-                if len(cols) >= 5 and route_data:
+                if len(cols) >= 3 and route_data:
                     stops_text = cols[0].get_text(strip=True)
                     time_text = cols[2].get_text(strip=True)
-                    dist_text = cols[4].get_text(strip=True)
+                    dist_text = cols[4].get_text(strip=True) if len(cols) > 4 else ""
+
+                    if not dist_text:
+                        for col in cols:
+                            t = col.get_text(strip=True)
+                            if "km" in t.lower():
+                                dist_text = t
+                                break
+
+                    dist_clean = dist_text.replace("km", "").strip() if dist_text else "-"
                     stop_count = stops_text.split()[0] if ' ' in stops_text else "0"
 
                     route_data[-1]["next_segment"] = {
                         "intermediate_stops": int(stop_count) if stop_count.isdigit() else 0,
                         "travel_time": time_text or "-",
-                        "distance": f"{dist_text} km" if dist_text else "-"
+                        "distance_covered": f"{dist_clean} km" if dist_clean != "-" else "-"
                     }
 
-        # Clean last station
         if route_data:
             route_data[-1]["quota"] = "Terminus"
             route_data[-1]["leg_from"] = "-"
