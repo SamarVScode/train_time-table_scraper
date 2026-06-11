@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import os
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -24,10 +25,14 @@ def scrape_train_data(train_number):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 
+    # Check if user has defined a proxy via environment variables
+    proxy_url = os.environ.get('PROXY_URL')
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+
     search_url = f"https://indiarailinfo.com/blog?q={train_number}"
 
     try:
-        res = requests.get(search_url, headers=headers, timeout=15)
+        res = requests.get(search_url, headers=headers, proxies=proxies, timeout=15)
         res.raise_for_status()
         raw_html = res.text
 
@@ -60,7 +65,7 @@ def scrape_train_data(train_number):
                 "train_number": train_number
             }
 
-        timetable_res = requests.get(timetable_url, headers=headers, timeout=15)
+        timetable_res = requests.get(timetable_url, headers=headers, proxies=proxies, timeout=15)
         timetable_res.raise_for_status()
         soup_table = BeautifulSoup(timetable_res.text, 'html.parser')
 
