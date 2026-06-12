@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Frontend Tools (Stored locally, not in Git)
+static/
+index.html
+
+# Database Scripts
+check_tables.py
+verify_db.py
+test_supabase.py
+test_supabase.py
+SUPABASE_SETUP.md
+
+# Deployment
+.vercel
