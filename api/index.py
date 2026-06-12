@@ -1,11 +1,34 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import re
 import requests
 from bs4 import BeautifulSoup
+import os
+from dotenv import load_dotenv
+from supabase import create_client, Client
 
-app = Flask(__name__)
+# Load environment variables
+load_dotenv()
+
+# Configure Flask to use the 'static' folder
+app = Flask(__name__, static_folder='../static')
 CORS(app)
+
+# Supabase setup
+url: str = os.environ.get("SUPABASE_URL", "")
+key: str = os.environ.get("SUPABASE_KEY", "")
+supabase: Client = None
+
+if url and key:
+    supabase = create_client(url, key)
+
+@app.route('/')
+def serve_index():
+    return app.send_static_file('index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return app.send_static_file(path)
 
 def clean_url(href, base="https://indiarailinfo.com"):
     if not href:
@@ -25,7 +48,7 @@ def scrape_train_data(train_number):
     search_url = f"https://indiarailinfo.com/blog?q={train_number}"
 
     # ScraperAPI configuration
-    scraperapi_key = '2489929e94aa0f1851699927d4155daf'
+    scraperapi_key = os.environ.get('SCRAPERAPI_KEY', '2489929e94aa0f1851699927d4155daf')
     scraperapi_endpoint = 'https://api.scraperapi.com/'
 
     try:
@@ -193,6 +216,105 @@ def scrape_train_data(train_number):
     except Exception as e:
         return {"success": False, "error": f"Error: {str(e)}", "train_number": train_number}
 
+def save_to_supabase(data):
+    if not supabase:
+        return
+    
+    try:
+        # Save to trains table
+        train_info = {
+            "train_number": data["train_number"],
+            "train_name": data["train_name"],
+            "total_stations": data["total_stations"],
+            "source_station": data["source"],
+            "destination_station": data["destination"]
+        }
+        supabase.table("trains").upsert(train_info).execute()
+
+        # Save to train_routes table
+        route_entries = []
+        for stop in data["route"]:
+            entry = {
+                "train_number": data["train_number"],
+                "stop_number": stop["stop"],
+                "station_code": stop["code"],
+                "station_name": stop["name"],
+                "arrival_time": stop["arrival"],
+                "departure_time": stop["departure"],
+                "halt_time": stop["halt_time"],
+                "platform": stop["platform"],
+                "day_count": stop["day"],
+                "distance_covered": stop["distance_covered"],
+                "quota": stop["quota"],
+                "leg_from": stop["leg_from"]
+            }
+            
+            if "next_segment" in stop:
+                entry["next_segment_intermediate_stops"] = stop["next_segment"].get("intermediate_stops")
+                entry["next_segment_travel_time"] = stop["next_segment"].get("travel_time")
+                entry["next_segment_distance_covered"] = stop["next_segment"].get("distance_covered")
+            
+            route_entries.append(entry)
+        
+        if route_entries:
+            supabase.table("train_routes").upsert(route_entries).execute()
+            
+    except Exception as e:
+        print(f"Error saving to Supabase: {e}")
+
+def get_from_supabase(train_number):
+    if not supabase:
+        return None
+    
+    try:
+        # Fetch train info
+        train_res = supabase.table("trains").select("*").eq("train_number", train_number).execute()
+        if not train_res.data:
+            return None
+        
+        train_info = train_res.data[0]
+        
+        # Fetch route details
+        route_res = supabase.table("train_routes").select("*").eq("train_number", train_number).order("stop_number").execute()
+        
+        route_data = []
+        for row in route_res.data:
+            stop = {
+                "stop": row["stop_number"],
+                "code": row["station_code"],
+                "name": row["station_name"],
+                "arrival": row["arrival_time"],
+                "departure": row["departure_time"],
+                "halt_time": row["halt_time"],
+                "platform": row["platform"],
+                "day": row["day_count"],
+                "distance_covered": row["distance_covered"],
+                "quota": row["quota"],
+                "leg_from": row["leg_from"]
+            }
+            
+            if row.get("next_segment_travel_time"):
+                stop["next_segment"] = {
+                    "intermediate_stops": row["next_segment_intermediate_stops"],
+                    "travel_time": row["next_segment_travel_time"],
+                    "distance_covered": row["next_segment_distance_covered"]
+                }
+            route_data.append(stop)
+            
+        return {
+            "success": True,
+            "train_number": train_info["train_number"],
+            "train_name": train_info["train_name"],
+            "total_stations": train_info["total_stations"],
+            "source": train_info["source_station"],
+            "destination": train_info["destination_station"],
+            "route": route_data,
+            "cached": True
+        }
+    except Exception as e:
+        print(f"Error fetching from Supabase: {e}")
+        return None
+
 @app.route('/api/train/<train_number>', methods=['GET'])
 def get_train_data(train_number):
     if not (train_number.isdigit() and len(train_number) == 5):
@@ -202,7 +324,18 @@ def get_train_data(train_number):
             "example": "12345"
         }), 400
 
+    # 1. Try fetching from Supabase
+    cached_result = get_from_supabase(train_number)
+    if cached_result:
+        return jsonify(cached_result), 200
+
+    # 2. If not in DB, scrape from IndiaRailInfo
     result = scrape_train_data(train_number)
+    
+    # 3. Save to Supabase if scraping was successful
+    if result.get("success"):
+        save_to_supabase(result)
+        
     return jsonify(result), 200 if result.get("success") else 500
 
 if __name__ == '__main__':
