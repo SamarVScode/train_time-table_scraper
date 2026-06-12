@@ -42,6 +42,18 @@ class ConfirmTktParser:
             content = NetworkClient.post(url, params=params)
             data = json.loads(content)
             
+            if "error" in data:
+                error_msg = "Unknown error"
+                if isinstance(data["error"], dict) and "message" in data["error"]:
+                    error_msg = data["error"]["message"]
+                elif isinstance(data["error"], str):
+                    error_msg = data["error"]
+                return AvailabilityResponse(
+                    success=False, train_number=train_no, from_station=from_stn,
+                    to_station=to_stn, quota=quota, travel_class=travel_class,
+                    availability=[], error=error_msg
+                )
+
             if not data or "data" not in data or "avlDayList" not in data["data"]:
                 return AvailabilityResponse(
                     success=False, train_number=train_no, from_station=from_stn,
