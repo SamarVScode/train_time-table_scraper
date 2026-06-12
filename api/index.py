@@ -338,5 +338,33 @@ def get_train_data(train_number):
         
     return jsonify(result), 200 if result.get("success") else 500
 
+@app.route('/api/availability', methods=['GET'])
+def get_availability():
+    train_no = request.args.get('train_no')
+    from_stn = request.args.get('from')
+    to_stn = request.args.get('to')
+    date = request.args.get('date')
+    travel_class = request.args.get('class', 'SL')
+    quota = request.args.get('quota', 'GN')
+
+    if not all([train_no, from_stn, to_stn, date]):
+        return jsonify({
+            "success": False,
+            "error": "Missing required query parameters: train_no, from, to, date"
+        }), 400
+
+    try:
+        from availability_scraper.parsers.confirmtkt import ConfirmTktParser
+        result = ConfirmTktParser.get_availability(
+            train_no, from_stn, to_stn, date, travel_class, quota
+        )
+        return jsonify(result.to_dict()), 200 if result.success else 500
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
+
