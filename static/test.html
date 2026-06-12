@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Tester Dashboard</title>
+    <!-- Modern Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+        }
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #f8fafc;
+            transition: all 0.3s ease;
+        }
+        .glass-input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.4);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col justify-between p-4 md:p-8">
+    <div class="max-w-4xl w-full mx-auto my-auto">
+        <!-- Header -->
+        <div class="mb-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    API Tester Dashboard
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Test route schedule and seat availability endpoints on your live server</p>
+            </div>
+
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+            <!-- Controls Sidebar -->
+            <div class="glass rounded-2xl p-6 md:col-span-5 shadow-2xl flex flex-col gap-6">
+                <!-- Navigation Tabs -->
+                <div class="flex p-1 bg-slate-900/60 rounded-xl">
+                    <button onclick="switchTab('route')" id="tab-route" 
+                            class="flex-1 text-center py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 bg-indigo-600 text-white shadow-lg shadow-indigo-600/20">
+                        Route Info
+                    </button>
+                    <button onclick="switchTab('availability')" id="tab-availability" 
+                            class="flex-1 text-center py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-slate-400 hover:text-slate-200">
+                        Availability
+                    </button>
+                </div>
+
+                <!-- Form Area -->
+                <div class="space-y-4">
+                    <!-- Train Number (Used in both) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1.5">Train Number</label>
+                        <input type="text" id="trainNo" placeholder="e.g. 12417" maxlength="5"
+                               class="w-full glass-input px-4 py-2.5 rounded-xl text-sm outline-none font-mono">
+                    </div>
+
+                    <!-- Availability-only fields -->
+                    <div id="availabilityFields" class="hidden space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1.5">From Station</label>
+                                <input type="text" id="fromStn" placeholder="e.g. PRYJ" 
+                                       class="w-full glass-input px-4 py-2.5 rounded-xl text-sm outline-none font-mono uppercase">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1.5">To Station</label>
+                                <input type="text" id="toStn" placeholder="e.g. NDLS" 
+                                       class="w-full glass-input px-4 py-2.5 rounded-xl text-sm outline-none font-mono uppercase">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1.5">Journey Date</label>
+                            <input type="text" id="doj" placeholder="DD-MM-YYYY (e.g. 25-06-2026)" 
+                                   class="w-full glass-input px-4 py-2.5 rounded-xl text-sm outline-none font-mono">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1.5">Class</label>
+                                <select id="travelClass" class="w-full glass-input px-3 py-2.5 rounded-xl text-sm outline-none">
+                                    <option value="SL">Sleeper (SL)</option>
+                                    <option value="3A" selected>3 AC (3A)</option>
+                                    <option value="2A">2 AC (2A)</option>
+                                    <option value="1A">1 AC (1A)</option>
+                                    <option value="CC">Chair Car (CC)</option>
+                                    <option value="3E">3 AC Economy (3E)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1.5">Quota</label>
+                                <select id="quota" class="w-full glass-input px-3 py-2.5 rounded-xl text-sm outline-none">
+                                    <option value="GN" selected>General (GN)</option>
+                                    <option value="TQ">Tatkal (TQ)</option>
+                                    <option value="LD">Ladies (LD)</option>
+                                    <option value="SS">Sr. Citizen (SS)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button onclick="runApiTest()" id="submitBtn" 
+                        class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-3 rounded-xl transition duration-300 shadow-xl shadow-indigo-500/10 flex items-center justify-center gap-2">
+                    <span id="btnText">Execute Request</span>
+                    <svg id="btnSpinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="md:col-span-7 flex flex-col gap-6">
+                <!-- Status Bar -->
+                <div id="statusBar" class="glass rounded-xl px-6 py-4 flex items-center justify-between hidden">
+                    <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase">Status</span>
+                    <span id="statusLabel" class="text-xs font-bold px-2.5 py-1 rounded"></span>
+                </div>
+
+                <!-- Visual Overview Card -->
+                <div id="visualCard" class="glass rounded-2xl p-6 shadow-2xl hidden">
+                    <h2 class="text-sm font-bold text-slate-300 border-b border-white/5 pb-3 mb-4" id="visualTitle">Overview</h2>
+                    <div id="visualContent" class="space-y-3 max-h-60 overflow-y-auto pr-2">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+
+                <!-- Raw JSON View -->
+                <div class="glass rounded-2xl p-6 shadow-2xl flex-grow flex flex-col min-h-[300px]">
+                    <div class="flex justify-between items-center border-b border-white/5 pb-3 mb-4">
+                        <span class="text-sm font-bold text-slate-300">Raw JSON Output</span>
+                        <button onclick="copyRawJson()" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition">Copy JSON</button>
+                    </div>
+                    <pre id="jsonViewer" class="text-xs text-slate-300 font-mono overflow-auto max-h-[400px] flex-grow select-all bg-slate-950/60 p-4 rounded-xl border border-white/5">Waiting for request...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center text-xs text-slate-500">
+        ConfirmTkt & IndiaRailInfo Scraper Dashboard &bull; Antigravity Developer Suite
+    </div>
+
+    <script>
+        let currentTab = 'route';
+
+        function switchTab(tab) {
+            currentTab = tab;
+            const tabRoute = document.getElementById('tab-route');
+            const tabAvail = document.getElementById('tab-availability');
+            const availFields = document.getElementById('availabilityFields');
+
+            if (tab === 'route') {
+                tabRoute.className = "flex-1 text-center py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 bg-indigo-600 text-white shadow-lg shadow-indigo-600/20";
+                tabAvail.className = "flex-1 text-center py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-slate-400 hover:text-slate-200";
+                availFields.classList.add('hidden');
+            } else {
+                tabAvail.className = "flex-1 text-center py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 bg-indigo-600 text-white shadow-lg shadow-indigo-600/20";
+                tabRoute.className = "flex-1 text-center py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-slate-400 hover:text-slate-200";
+                availFields.classList.remove('hidden');
+            }
+        }
+
+        async function runApiTest() {
+            const baseUrl = "https://train-time-table-scraper.onrender.com";
+            const trainNo = document.getElementById('trainNo').value.trim();
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            const jsonViewer = document.getElementById('jsonViewer');
+            const statusBar = document.getElementById('statusBar');
+            const statusLabel = document.getElementById('statusLabel');
+            const visualCard = document.getElementById('visualCard');
+            const visualTitle = document.getElementById('visualTitle');
+            const visualContent = document.getElementById('visualContent');
+
+            if (!trainNo || trainNo.length !== 5 || isNaN(trainNo)) {
+                alert("Please enter a valid 5-digit Train Number.");
+                return;
+            }
+
+            // UI loading state
+            btnText.classList.add('hidden');
+            btnSpinner.classList.remove('hidden');
+            submitBtn.disabled = true;
+            jsonViewer.innerText = "Connecting to server...";
+            statusBar.classList.add('hidden');
+            visualCard.classList.add('hidden');
+
+            let requestUrl = "";
+            if (currentTab === 'route') {
+                requestUrl = `${baseUrl}/api/train/${trainNo}`;
+            } else {
+                const from = document.getElementById('fromStn').value.trim().toUpperCase();
+                const to = document.getElementById('toStn').value.trim().toUpperCase();
+                const doj = document.getElementById('doj').value.trim();
+                const travelClass = document.getElementById('travelClass').value;
+                const quota = document.getElementById('quota').value;
+
+                if (!from || !to || !doj) {
+                    alert("Please fill in From, To, and Date fields.");
+                    btnText.classList.remove('hidden');
+                    btnSpinner.classList.add('hidden');
+                    submitBtn.disabled = false;
+                    jsonViewer.innerText = "Waiting for request...";
+                    return;
+                }
+                requestUrl = `${baseUrl}/api/availability?train_no=${trainNo}&from=${from}&to=${to}&date=${doj}&class=${travelClass}&quota=${quota}`;
+            }
+
+            try {
+                const response = await fetch(requestUrl);
+                const data = await response.json();
+
+                // Set status code badge
+                statusBar.classList.remove('hidden');
+                statusLabel.innerText = `${response.status} ${response.statusText || (response.ok ? 'OK' : 'Error')}`;
+                if (response.ok) {
+                    statusLabel.className = "text-xs font-bold px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                } else {
+                    statusLabel.className = "text-xs font-bold px-2.5 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30";
+                }
+
+                jsonViewer.innerText = JSON.stringify(data, null, 2);
+
+                // Populate Visual overview
+                if (data.success) {
+                    visualCard.classList.remove('hidden');
+                    if (currentTab === 'route') {
+                        visualTitle.innerText = `Route: ${data.train_name || 'Train Schedule'}`;
+                        let html = `<div class="text-xs text-indigo-300 font-semibold mb-2">${data.source} → ${data.destination} (${data.total_stations} stations)</div>`;
+                        html += `<div class="space-y-2.5">`;
+                        (data.route || []).forEach(stop => {
+                            html += `
+                                <div class="flex items-center justify-between text-xs bg-slate-900/40 p-2.5 rounded-xl border border-white/5">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-indigo-400 font-mono">${stop.stop}</span>
+                                        <div class="font-bold">${stop.name} (${stop.code})</div>
+                                    </div>
+                                    <div class="text-slate-400">${stop.arrival || '-'} / ${stop.departure || '-'}</div>
+                                </div>
+                            `;
+                        });
+                        html += `</div>`;
+                        visualContent.innerHTML = html;
+                    } else {
+                        visualTitle.innerText = `Availability Cache for Train ${data.train_number}`;
+                        let html = `<div class="text-xs text-indigo-300 font-semibold mb-2">${data.from_station} → ${data.to_station} | ${data.travel_class} Class</div>`;
+                        html += `<div class="grid grid-cols-1 gap-2">`;
+                        (data.availability || []).forEach(item => {
+                            let statusColor = "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
+                            if (item.status.includes("AVAILABLE") || item.status.includes("CURR_AVBL")) {
+                                statusColor = "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+                            } else if (item.status.includes("REGRET") || item.status.includes("CLASS CANCELLED")) {
+                                statusColor = "text-red-400 bg-red-500/10 border-red-500/20";
+                            }
+                            html += `
+                                <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-white/5 text-xs">
+                                    <div class="font-semibold">${item.date}</div>
+                                    <div class="flex items-center gap-3">
+                                        <span class="px-2 py-0.5 rounded border ${statusColor} font-bold font-mono">${item.status}</span>
+                                        <span class="text-indigo-300 font-semibold">${item.prediction || ''}</span>
+                                        <span class="text-slate-400 font-mono">₹${item.fare || '-'}</span>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += `</div>`;
+                        visualContent.innerHTML = html;
+                    }
+                }
+            } catch (err) {
+                statusBar.classList.remove('hidden');
+                statusLabel.innerText = "Network Error";
+                statusLabel.className = "text-xs font-bold px-2.5 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30";
+                jsonViewer.innerText = `Network Error: Could not connect to API.\n${err.toString()}`;
+            } finally {
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+                submitBtn.disabled = false;
+            }
+        }
+
+        function copyRawJson() {
+            const pre = document.getElementById('jsonViewer');
+            navigator.clipboard.writeText(pre.innerText).then(() => {
+                alert("JSON copied to clipboard!");
+            }).catch(err => {
+                alert("Failed to copy JSON: " + err);
+            });
+        }
+    </script>
+</body>
+</html>
