@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Train Scraper</title>
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; color: #334155; }
+        .log-container { background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .log-entry { border-bottom: 1px solid #f1f5f9; }
+        .log-entry:last-child { border-bottom: none; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="mb-8">
+            <h1 class="text-2xl font-bold text-slate-900">Batch Scraper</h1>
+            <p class="text-slate-500 text-sm mt-1">Paste train numbers below to scrape and store them in Supabase.</p>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Train Numbers</label>
+            <textarea id="trainList" rows="5" placeholder="Enter train numbers (e.g. 12002, 12301 or one per line)" 
+                      class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-mono text-sm"></textarea>
+            
+            <div class="mt-4 flex items-center justify-between">
+                <div id="statusText" class="text-sm text-slate-500">Ready to process.</div>
+                <button onclick="startBatch()" id="startBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors flex items-center gap-2">
+                    <span id="btnLabel">Start Batch</span>
+                    <svg id="btnSpinner" class="animate-spin h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="logContainer" class="hidden log-container overflow-hidden">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Activity Log</span>
+                <span id="progressPercent" class="text-xs font-semibold text-blue-600">0%</span>
+            </div>
+            <div id="logBody" class="max-h-[400px] overflow-y-auto">
+                <!-- Log entries will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function startBatch() {
+            const input = document.getElementById('trainList').value;
+            const trainNumbers = input.split(/[\s,]+/).filter(n => n.length === 5 && !isNaN(n));
+            
+            if (trainNumbers.length === 0) {
+                alert("Please enter valid 5-digit train numbers.");
+                return;
+            }
+
+            const startBtn = document.getElementById('startBtn');
+            const btnLabel = document.getElementById('btnLabel');
+            const btnSpinner = document.getElementById('btnSpinner');
+            const logContainer = document.getElementById('logContainer');
+            const logBody = document.getElementById('logBody');
+            const statusText = document.getElementById('statusText');
+            const progressPercent = document.getElementById('progressPercent');
+
+            startBtn.disabled = true;
+            btnLabel.innerText = "Processing...";
+            btnSpinner.classList.remove('hidden');
+            logContainer.classList.remove('hidden');
+            logBody.innerHTML = '';
+            
+            let completed = 0;
+            const total = trainNumbers.length;
+
+            for (const trainNum of trainNumbers) {
+                statusText.innerText = `Processing ${trainNum}...`;
+                const entry = document.createElement('div');
+                entry.className = "log-entry px-6 py-3 flex items-center justify-between text-sm";
+                entry.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="font-mono font-bold text-slate-700">${trainNum}</span>
+                        <span class="text-slate-400 text-xs">Waiting...</span>
+                    </div>
+                    <div class="animate-pulse w-2 h-2 rounded-full bg-blue-400"></div>
+                `;
+                logBody.prepend(entry);
+
+                try {
+                    const RENDER_URL = "https://train-time-table-scraper.onrender.com";
+                    const response = await fetch(`${RENDER_URL}/api/train/${trainNum}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const statusTag = data.cached ? 
+                            `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">✅ FROM SUPABASE</span>` : 
+                            `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">🌐 SCRAPED & SAVED</span>`;
+                        
+                        entry.innerHTML = `
+                            <div class="flex items-center gap-3">
+                                <span class="font-mono font-bold text-slate-700">${trainNum}</span>
+                                <span class="text-slate-500">${data.train_name}</span>
+                                ${statusTag}
+                            </div>
+                            <svg class="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                        `;
+                    } else {
+                        entry.innerHTML = `
+                            <div class="flex items-center gap-3">
+                                <span class="font-mono font-bold text-slate-700">${trainNum}</span>
+                                <span class="text-red-500 font-medium">Error: ${data.error}</span>
+                            </div>
+                            <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+                        `;
+                    }
+                } catch (err) {
+                    entry.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <span class="font-mono font-bold text-slate-700">${trainNum}</span>
+                            <span class="text-red-500 font-medium">Network Failure</span>
+                        </div>
+                        <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+                    `;
+                }
+                
+                completed++;
+                progressPercent.innerText = `${Math.round((completed / total) * 100)}%`;
+            }
+
+            statusText.innerText = "Batch processing complete.";
+            btnLabel.innerText = "Start Batch";
+            btnSpinner.classList.add('hidden');
+            startBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>

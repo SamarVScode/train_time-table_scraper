@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IndiaRailInfo Scraper</title>
+    <!-- Use a cleaner, minimal font like Inter -->
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+                    },
+                    colors: {
+                        rail: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; color: #334155; }
+        .train-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        th { font-weight: 600; color: #475569; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+        td { border-bottom: 1px solid #f1f5f9; }
+        tr:last-child td { border-bottom: none; }
+        .station-dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; margin-right: 12px; position: relative; }
+        .station-dot::after { content: ''; position: absolute; top: 8px; left: 3px; width: 2px; height: 100%; background: #e2e8f0; }
+        tr:last-child .station-dot::after { display: none; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Train Schedule</h1>
+                <p class="text-slate-500 text-sm mt-1">Real-time route and quota information</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <div class="relative">
+                    <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <input type="text" id="trainInput" placeholder="Enter 5-digit Train No." maxlength="5"
+                           class="w-64 pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
+                </div>
+                <button onclick="fetchTrainData()" id="searchBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-5 rounded-lg transition-colors flex items-center justify-center min-w-[100px]">
+                    <span id="btnText">Search</span>
+                    <svg id="btnSpinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="errorContainer" class="hidden mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-3">
+            <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+            <span id="errorText"></span>
+        </div>
+
+        <div id="outputContainer" class="hidden">
+            <!-- Header -->
+            <div class="train-card mb-6 p-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <div class="flex items-center gap-3 mb-1">
+                            <span id="trainNumBadge" class="bg-blue-100 text-blue-700 font-semibold px-2.5 py-0.5 rounded text-sm"></span>
+                            <h2 id="trainName" class="text-2xl font-bold text-slate-900 tracking-tight"></h2>
+                        </div>
+                        <div class="text-slate-500 text-sm flex items-center gap-2">
+                            <span id="trainRouteInfo" class="font-medium"></span>
+                            <span>&bull;</span>
+                            <span id="trainStops"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule Table -->
+            <div class="train-card overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-6 py-4">Station</th>
+                                <th class="px-6 py-4">Arr / Dep</th>
+                                <th class="px-6 py-4">Halt</th>
+                                <th class="px-6 py-4">Dist (Km)</th>
+                                <th class="px-6 py-4">PF / Day</th>
+                                <th class="px-6 py-4 text-right">Quota</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("trainInput").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                fetchTrainData();
+            }
+        });
+
+        async function fetchTrainData() {
+            const trainNum = document.getElementById('trainInput').value.trim();
+            const output = document.getElementById('outputContainer');
+            const errBox = document.getElementById('errorContainer');
+            const errText = document.getElementById('errorText');
+
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            const searchBtn = document.getElementById('searchBtn');
+
+            if (trainNum.length !== 5 || isNaN(trainNum)) {
+                errText.innerText = "Please enter a valid 5-digit train number.";
+                errBox.classList.remove('hidden');
+                output.classList.add('hidden');
+                return;
+            }
+
+            output.classList.add('hidden');
+            errBox.classList.add('hidden');
+
+            btnText.classList.add('hidden');
+            btnSpinner.classList.remove('hidden');
+            searchBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/train/' + trainNum);
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('trainNumBadge').innerText = data.train_number;
+                    document.getElementById('trainName').innerText = data.train_name;
+                    document.getElementById('trainRouteInfo').innerText = `${data.source} → ${data.destination}`;
+                    document.getElementById('trainStops').innerText = `${data.total_stations} Stations`;
+
+                    const tbody = document.getElementById('tableBody');
+                    tbody.innerHTML = '';
+
+                    data.route.forEach((stop, index) => {
+                        // Formatting empty fields
+                        const arr = stop.arrival || '-';
+                        const dep = stop.departure || '-';
+                        const halt = stop.halt_time || '-';
+                        const pf = stop.platform || '-';
+
+                        let quotaBadge = '';
+                        let q = stop.quota.toUpperCase();
+
+                        if (q.includes('GN')) {
+                            quotaBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-medium border border-emerald-200">GN</span>`;
+                        } else if (q.includes('RL')) {
+                            quotaBadge = `<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium border border-purple-200">RL</span>`;
+                        } else if (q.includes('PQ')) {
+                            quotaBadge = `<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs font-medium border border-amber-200">PQ</span>`;
+                        } else if (q.includes('TERMINUS')) {
+                            quotaBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-medium border border-slate-200">END</span>`;
+                        } else {
+                            quotaBadge = `<span class="text-slate-500 text-xs font-medium">${stop.quota}</span>`;
+                        }
+
+                        let legTooltip = stop.leg_from !== '-' && stop.leg_from !== 'Origin' ? `title="Quota starts from: ${stop.leg_from}"` : '';
+
+                        // Determine station dot color based on terminus vs intermediate
+                        const isEnd = index === 0 || index === data.route.length - 1;
+                        const dotColor = isEnd ? 'bg-blue-500' : 'bg-slate-300';
+
+                        let rowHtml = `
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-6 py-4">
+                                    <div class="flex items-start">
+                                        <div class="mt-1.5 flex-shrink-0"><div class="w-2.5 h-2.5 rounded-full ${dotColor}"></div></div>
+                                        <div class="ml-3">
+                                            <div class="font-medium text-slate-900">${stop.name}</div>
+                                            <div class="text-slate-500 text-xs font-mono mt-0.5">${stop.code}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="text-slate-900">${arr} <span class="text-slate-400 mx-1">/</span> ${dep}</div>
+                                </td>
+                                <td class="px-6 py-4 text-slate-600">${halt}</td>
+                                <td class="px-6 py-4 text-slate-600 font-mono text-xs">${stop.distance_covered}</td>
+                                <td class="px-6 py-4">
+                                    <div class="text-slate-900">PF ${pf}</div>
+                                    <div class="text-slate-500 text-xs mt-0.5">Day ${stop.day}</div>
+                                </td>
+                                <td class="px-6 py-4 text-right" ${legTooltip}>
+                                    ${quotaBadge}
+                                </td>
+                            </tr>
+                        `;
+
+                        if (stop.next_segment) {
+                            rowHtml += `
+                            <tr>
+                                <td colspan="6" class="px-6 py-1 bg-slate-50/50">
+                                    <div class="pl-5 flex items-center gap-3 text-xs text-slate-400 font-medium border-l-2 border-slate-200 ml-1.5 py-1">
+                                        <span>${stop.next_segment.intermediate_stops} intermediate stops</span>
+                                        <span>&bull;</span>
+                                        <span>${stop.next_segment.travel_time}</span>
+                                        <span>&bull;</span>
+                                        <span>${stop.next_segment.distance_covered}</span>
+                                    </div>
+                                </td>
+                            </tr>`;
+                        }
+
+                        tbody.innerHTML += rowHtml;
+                    });
+
+                    output.classList.remove('hidden');
+                } else {
+                    errText.innerText = data.error || "Unknown error occurred while fetching data.";
+                    errBox.classList.remove('hidden');
+                }
+            } catch (error) {
+                errText.innerText = "Network error. Please try again.";
+                errBox.classList.remove('hidden');
+                console.error("Fetch Error:", error);
+            } finally {
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+                searchBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

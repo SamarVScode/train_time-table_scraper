@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Frontend Tools
+# static/ and index.html are now included
+
+# Database Scripts
+check_tables.py
+verify_db.py
+test_supabase.py
+test_supabase.py
+SUPABASE_SETUP.md
+
+# Deployment
+.vercel
+
+# Unnecessary Helper Scripts & Specs
+debug_fetch.py
+inspect_html.py
+
+
