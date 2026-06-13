@@ -374,6 +374,7 @@ def handle_global_exception(e):
     response.headers.add("Access-Control-Allow-Methods", "*")
     return response, 500
 
+# STATIC ROUTES (MUST BE AT THE VERY BOTTOM)
 @app.route('/')
 def serve_index():
     return app.send_static_file('index.html')
