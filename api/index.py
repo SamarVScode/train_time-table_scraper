@@ -335,6 +335,78 @@ def get_train_data(train_number):
         
     return jsonify(result), 200 if result.get("success") else 500
 
+@app.route('/api/search-train', methods=['GET'])
+def search_train():
+    from_stn = request.args.get('from')
+    to_stn = request.args.get('to')
+
+    if not from_stn or not to_stn:
+        return jsonify({
+            "success": False,
+            "error": "Missing required query parameters: from, to"
+        }), 400
+
+    if not supabase:
+        return jsonify({
+            "success": False,
+            "error": "Database connection not configured."
+        }), 500
+
+    try:
+        from_stn = from_stn.upper()
+        to_stn = to_stn.upper()
+
+        # Query train_routes for 'from' station
+        from_routes_res = supabase.table("train_routes").select("train_number, stop_number, departure_time").eq("station_code", from_stn).execute()
+        if not from_routes_res.data:
+            return jsonify({"success": True, "trains": []}), 200
+
+        # Query train_routes for 'to' station
+        to_routes_res = supabase.table("train_routes").select("train_number, stop_number").eq("station_code", to_stn).execute()
+        if not to_routes_res.data:
+            return jsonify({"success": True, "trains": []}), 200
+
+        # Create dictionaries to quickly lookup stop numbers
+        from_trains = {row["train_number"]: row for row in from_routes_res.data}
+        to_trains = {row["train_number"]: row for row in to_routes_res.data}
+
+        # Find valid trains (from stop_number < to stop_number)
+        valid_train_numbers = []
+        train_departure_times = {}
+
+        for train_number, from_data in from_trains.items():
+            if train_number in to_trains:
+                if from_data["stop_number"] < to_trains[train_number]["stop_number"]:
+                    valid_train_numbers.append(train_number)
+                    train_departure_times[train_number] = from_data["departure_time"]
+
+        if not valid_train_numbers:
+            return jsonify({"success": True, "trains": []}), 200
+
+        # Fetch train names for valid trains
+        trains_res = supabase.table("trains").select("train_number, train_name").in_("train_number", valid_train_numbers).execute()
+
+        trains_data = []
+        for row in trains_res.data:
+            train_num = row["train_number"]
+            trains_data.append({
+                "train_number": train_num,
+                "train_name": row["train_name"],
+                "departure_time": train_departure_times.get(train_num, "-")
+            })
+
+        return jsonify({
+            "success": True,
+            "trains": trains_data
+        }), 200
+
+    except Exception as e:
+        print(f"Error searching trains: {e}")
+        return jsonify({
+            "success": False,
+            "error": "An error occurred while searching for trains."
+        }), 500
+
 @app.route('/api/availability', methods=['GET'])
 def get_availability():
     train_no = request.args.get('train_no')
